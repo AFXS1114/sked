@@ -1,0 +1,68 @@
+You are a senior React Native / Expo engineer. Build a full-stack mobile application using **Expo SDK 54** and **Supabase** as the backend database. The app has two distinct user roles: **Manager** and **Admin**. All data operations must use SQL CRUD via Supabase's JavaScript client.
+
+---
+
+**Project Setup Requirements**
+
+- Expo SDK 54 (strict — do not use features deprecated or unavailable in SDK 54)
+- Supabase (`@supabase/supabase-js`) for all database operations
+- Navigation: `expo-router` or `react-navigation` (choose whichever is fully compatible with SDK 54)
+- Notifications: `expo-notifications`
+- Styling: Flat UI design system with flat, minimal color palette (no gradients, no shadows); use `@expo/vector-icons` for all iconography
+- After generating all code, save a copy of this entire prompt to the project root as `app_prompt.txt`
+
+---
+
+**Supabase Database Schema**
+
+Design and provide the SQL migration scripts to create the following tables:
+
+- `employees` — id, full_name, phone_number, position, created_at
+- `schedules` — id, employee_id (FK), work_date, shift_type (`duty` | `day_off`)
+- `leaves` — id, employee_id (FK), start_date, end_date, reason, status (`pending` | `approved` | `absent`)
+
+All CRUD operations must go through Supabase (no local state as a source of truth).
+
+---
+
+**Admin Role — Full Control**
+
+The Admin screen must include:
+
+1. **Employee Management** — Add, edit, and delete employee records (name, phone number, position). Use Supabase CRUD against the `employees` table.
+2. **Work Schedule Management** — Assign daily work schedules per employee: set a date as `duty` or `day_off`. CRUD against `schedules`.
+3. **Leave & Absence Management** — Create, update, and delete leave records per employee. Mark employees as `approved leave` or `absent`. CRUD against `leaves`.
+4. All forms must have input validation before any Supabase write operation.
+
+---
+
+**Manager Role — Monitoring**
+
+The Manager screen must include:
+
+1. **Today's Duty Board** — Query `schedules` for today's date, display who is on `duty` and who is on `day_off` in clearly separated flat UI list cards.
+2. **Leave Viewer** — Query `leaves` table for currently active leaves (where today falls between `start_date` and `end_date`), display employee name, reason, and dates.
+3. **Personnel Contact Directory** — List all employees with their `full_name`, `position`, and `phone_number`. Include a tap-to-call action using `Linking.openURL('tel:...')`.
+4. **Push Notifications** — On app launch (or on a scheduled daily trigger via `expo-notifications`), fire a local notification summarizing: number of employees on duty, number on day-off, and number on leave for today.
+
+---
+
+**UI / Styling Rules**
+
+- Flat UI color palette: use bold solid colors (e.g., `#2ECC71`, `#E74C3C`, `#3498DB`, `#F39C12`, `#ECF0F1`, `#2C3E50`)
+- No drop shadows, no gradients
+- `@expo/vector-icons` (Ionicons or MaterialIcons) for all icons — duty, day-off, leave, phone, add, edit, delete
+- Role selection (Manager vs Admin) on a clean home/login screen
+- Consistent flat card components for list items across all screens
+
+---
+
+**Code Quality Requirements**
+
+- Modular file structure: separate `/screens`, `/components`, `/lib` (Supabase client), `/hooks`
+- Supabase client initialized once in `/lib/supabase.js` with environment variables (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) read from `.env`
+- All async operations wrapped in try/catch with user-facing error messages
+- Loading states shown for all data fetch and write operations
+- Provide the complete `app_prompt.txt` write logic (use `expo-file-system` or Node's `fs` at build time) to save this prompt to the project root
+
+Deliver the complete project: all source files, the Supabase SQL migration script, `app.json`, `package.json`, `.env.example`, and `app_prompt.txt`.
