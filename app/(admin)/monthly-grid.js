@@ -11,6 +11,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  RefreshControl,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
@@ -44,6 +45,7 @@ export default function MonthlyGridScreen() {
   const [schedules, setSchedules] = useState({});
   const [shifts, setShifts] = useState(DEFAULT_SHIFTS);
   const [employeeShifts, setEmployeeShifts] = useState({});
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchGridData();
@@ -100,6 +102,12 @@ export default function MonthlyGridScreen() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await fetchGridData();
+    setRefreshing(false);
   }
 
   const getDaysInMonth = (date) => {
@@ -280,10 +288,16 @@ export default function MonthlyGridScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {loading && !refreshing ? (
         <ActivityIndicator size="large" color="#E74C3C" style={{ flex: 1 }} />
       ) : (
-        <ScrollView style={styles.gridContainer} contentContainerStyle={{ paddingBottom: 24 }}>
+        <ScrollView 
+          style={styles.gridContainer} 
+          contentContainerStyle={{ paddingBottom: 24 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#E74C3C"]} />
+          }
+        >
           {/* We wrap headers and rows in a horizontal ScrollView */}
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View style={styles.table}>

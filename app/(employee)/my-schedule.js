@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import FlatCard from '../../components/FlatCard';
+import BiometricSettings from '../../components/BiometricSettings';
+
 import FlatButton from '../../components/FlatButton';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,6 +18,7 @@ export default function MyScheduleScreen() {
   const [schedules, setSchedules] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [userShift, setUserShift] = useState(null);
 
   useEffect(() => {
@@ -33,8 +36,26 @@ export default function MyScheduleScreen() {
 
   async function fetchEmployees() {
     setLoading(true);
-    const { data } = await supabase.from('employees').select('*').order('full_name');
-    if (data) setEmployees(data);
+    try {
+      const { data: emps } = await supabase.from('employees').select('*').order('full_name');
+      
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = today.getMonth();
+      const shiftKey = `sked_employee_shifts_${year}_${month}`;
+      const storedEmpShifts = await AsyncStorage.getItem(shiftKey);
+      const activeEmpShifts = storedEmpShifts ? JSON.parse(storedEmpShifts) : {};
+
+      if (emps) {
+        const enriched = emps.map(emp => ({
+          ...emp,
+          isShiftAssigned: !!activeEmpShifts[emp.id]
+        }));
+        setEmployees(enriched);
+      }
+    } catch (e) {
+      console.error(e);
+    }
     setLoading(false);
   }
 
@@ -106,6 +127,19 @@ export default function MyScheduleScreen() {
     if (leavesRes.data) setLeaves(leavesRes.data);
   }
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    if (selectedEmployeeId) {
+      await Promise.all([
+        refreshData(selectedEmployeeId),
+        loadShiftsAndAssignment(selectedEmployeeId)
+      ]);
+    } else {
+      await fetchEmployees();
+    }
+    setRefreshing(false);
+  }
+
   const getOverlappingLeave = (dateStr) => {
     if (!leaves || leaves.length === 0) return null;
     return leaves.find(l => dateStr >= l.start_date && dateStr <= l.end_date);
@@ -114,17 +148,42 @@ export default function MyScheduleScreen() {
   if (!selectedEmployeeId) {
     return (
       <View style={styles.container}>
-        <Text style={styles.headerTitle}>Who are you?</Text>
+        <Text style={styles.headerTitle}>Select Your Profile</Text>
         {loading ? <ActivityIndicator size="large" color="#2ECC71" /> : (
           <FlatList
             data={employees}
             keyExtractor={item => item.id}
+            contentContainerStyle={{ paddingBottom: 24 }}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#2ECC71"]} />
+            }
             renderItem={({ item }) => (
-              <FlatButton 
-                title={item.full_name} 
-                onPress={() => fetchMySchedule(item.id)} 
-                color="#3498DB" 
-              />
+              <TouchableOpacity onPress={() => fetchMySchedule(item.id)} activeOpacity={0.7}>
+                <FlatCard style={styles.selectorCard}>
+                  <View style={[styles.selectorAvatar, { backgroundColor: item.isShiftAssigned ? '#E8F5E9' : '#FDEDEC' }]}>
+                    <Ionicons 
+                      name={item.isShiftAssigned ? "checkmark-circle" : "alert-circle"} 
+                      size={20} 
+                      color={item.isShiftAssigned ? "#2ECC71" : "#E74C3C"} 
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.selectorName}>{item.full_name}</Text>
+                    <Text style={styles.selectorRole}>{item.position}</Text>
+                  </View>
+                  <View style={[
+                    styles.indicatorBadge, 
+                    { backgroundColor: item.isShiftAssigned ? '#E8F5E9' : '#FDEDEC' }
+                  ]}>
+                    <Text style={[
+                      styles.indicatorText, 
+                      { color: item.isShiftAssigned ? '#27AE60' : '#C0392B' }
+                    ]}>
+                      {item.isShiftAssigned ? 'Active' : 'Unassigned'}
+                    </Text>
+                  </View>
+                </FlatCard>
+              </TouchableOpacity>
             )}
           />
         )}
@@ -134,13 +193,16 @@ export default function MyScheduleScreen() {
 
   return (
     <View style={styles.container}>
-      {loading ? (
+      {loading && !refreshing ? (
         <ActivityIndicator size="large" color="#2ECC71" style={{ marginTop: 64 }} />
       ) : (
         <FlatList
           data={schedules}
           keyExtractor={item => item.id}
           ListEmptyComponent={<Text style={styles.empty}>No schedules assigned.</Text>}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#2ECC71"]} />
+          }
           ListHeaderComponent={
             <View>
               {/* Action Buttons Row */}
@@ -158,6 +220,10 @@ export default function MyScheduleScreen() {
                   style={{ flex: 1, marginVertical: 0 }}
                 />
               </View>
+
+              {/* Biometric Security */}
+              <BiometricSettings />
+
               
               {/* Active Monthly Shift */}
               {userShift && (
@@ -253,6 +319,41 @@ export default function MyScheduleScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA', padding: 16 },
+  selectorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#ECF0F1',
+  },
+  selectorAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  selectorName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+  },
+  selectorRole: {
+    fontSize: 12,
+    color: '#7F8C8D',
+    marginTop: 2,
+  },
+  indicatorBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  indicatorText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#2C3E50', marginBottom: 16, textAlign: 'center', marginTop: 16 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#2C3E50', marginBottom: 12, marginTop: 8 },
   date: { fontSize: 16, fontWeight: 'bold', color: '#2C3E50' },

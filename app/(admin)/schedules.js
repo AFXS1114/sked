@@ -182,7 +182,7 @@ export default function SchedulesScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerTitle}>Monthly Bulk Scheduler</Text>
+      <Text style={styles.headerTitle}>Monthly Scheduler</Text>
 
       {/* Employee selector */}
       <Text style={styles.label}>Select Employee:</Text>

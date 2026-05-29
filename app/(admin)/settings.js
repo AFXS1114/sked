@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import FlatButton from '../../components/FlatButton';
 import FlatTextInput from '../../components/FlatTextInput';
 import FlatCard from '../../components/FlatCard';
+import BiometricSettings from '../../components/BiometricSettings';
+
 
 const DEFAULT_SHIFTS = [
   { id: 'market_shift_1', name: 'Market Shift 1', time: '4am - 12nn', color: '#2E7D32', bg: '#E8F5E9' },
@@ -42,11 +44,10 @@ export default function SettingsScreen() {
   const [editName, setEditName] = useState('');
   const [editTime, setEditTime] = useState('');
   const [editColorIndex, setEditColorIndex] = useState(0);
-  const [defaultPosition, setDefaultPosition] = useState('');
+  const [securityExpanded, setSecurityExpanded] = useState(false);
 
   useEffect(() => {
     loadShifts();
-    loadDefaultPosition();
   }, []);
 
   async function loadShifts() {
@@ -63,23 +64,7 @@ export default function SettingsScreen() {
     }
   }
 
-  async function loadDefaultPosition() {
-    try {
-      const stored = await AsyncStorage.getItem('sked_default_position');
-      if (stored) setDefaultPosition(stored);
-    } catch (e) {
-      console.error(e);
-    }
-  }
 
-  async function saveDefaultPosition(value) {
-    setDefaultPosition(value);
-    try {
-      await AsyncStorage.setItem('sked_default_position', value);
-    } catch (e) {
-      console.error(e);
-    }
-  }
 
   async function handleAddShift() {
     if (!name.trim() || !time.trim()) {
@@ -230,21 +215,27 @@ export default function SettingsScreen() {
         <Text style={styles.resetText}>Restore Default Market Shifts</Text>
       </TouchableOpacity>
 
-      {/* Default Position Section */}
+
+
+      {/* Biometric Security Section — Collapsible */}
       <View style={styles.sectionDivider} />
-      <Text style={styles.sectionTitle}>Employee Defaults</Text>
-      <Text style={styles.subtext}>Set a default position that will be pre-filled when adding new employees.</Text>
-      <FlatCard style={styles.positionCard}>
-        <View style={styles.positionRow}>
-          <Ionicons name="briefcase-outline" size={20} color="#2C3E50" style={{ marginRight: 12 }} />
-          <FlatTextInput
-            placeholder="e.g. Cashier, Bagger, Manager"
-            value={defaultPosition}
-            onChangeText={saveDefaultPosition}
-            style={styles.positionInput}
-          />
+      <TouchableOpacity
+        style={styles.collapsibleHeader}
+        onPress={() => setSecurityExpanded(prev => !prev)}
+        activeOpacity={0.7}
+      >
+        <View>
+          <Text style={styles.sectionTitle}>Security Settings</Text>
+          <Text style={styles.subtext}>Manage authentication and device access features.</Text>
         </View>
-      </FlatCard>
+        <Ionicons
+          name={securityExpanded ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          color="#7F8C8D"
+        />
+      </TouchableOpacity>
+      {securityExpanded && <BiometricSettings />}
+
 
       {/* Add Shift Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent>
@@ -360,6 +351,7 @@ export default function SettingsScreen() {
         </View>
       </Modal>
     </View>
+
   );
 }
 
@@ -391,9 +383,14 @@ const styles = StyleSheet.create({
   // Section
   sectionDivider: { height: 1, backgroundColor: '#ECF0F1', marginVertical: 12 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#2C3E50', marginBottom: 4 },
-  positionCard: { paddingVertical: 10, paddingHorizontal: 14 },
-  positionRow: { flexDirection: 'row', alignItems: 'center' },
-  positionInput: { flex: 1 },
+
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+
 
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

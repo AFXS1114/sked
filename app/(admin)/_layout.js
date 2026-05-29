@@ -1,10 +1,23 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, Alert } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AdminLayout() {
   const router = useRouter();
+  const { signOut } = useAuth();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Logout', onPress: signOut, style: 'destructive' }
+      ]
+    );
+  };
 
   return (
     <Tabs
@@ -15,6 +28,11 @@ export default function AdminLayout() {
         headerLeft: () => (
           <TouchableOpacity onPress={() => router.replace('/')} style={{ marginLeft: 16 }}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+        ),
+        headerRight: () => (
+          <TouchableOpacity onPress={handleLogout} style={{ marginRight: 16 }}>
+            <Ionicons name="log-out-outline" size={24} color="#FFF" />
           </TouchableOpacity>
         ),
       }}

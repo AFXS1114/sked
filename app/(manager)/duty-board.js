@@ -1,13 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from 'react-native';
 import FlatCard from '../../components/FlatCard';
+import BiometricSettings from '../../components/BiometricSettings';
+
 import { supabase } from '../../lib/supabase';
 
 export default function DutyBoardScreen() {
   const todayStr = new Date().toLocaleDateString('en-CA');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [onDuty, setOnDuty] = useState([]);
   const [dayOff, setDayOff] = useState([]);
   const [onLeave, setOnLeave] = useState([]);
@@ -19,6 +22,8 @@ export default function DutyBoardScreen() {
   const [employeeLeaves, setEmployeeLeaves] = useState([]);
   const [employeeShift, setEmployeeShift] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+
 
   useEffect(() => {
     fetchSchedules();
@@ -61,6 +66,42 @@ export default function DutyBoardScreen() {
       })));
     }
     setLoading(false);
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    
+    const [schedRes, leavesRes] = await Promise.all([
+      supabase
+        .from('schedules')
+        .select('*, employees(full_name, position)')
+        .eq('work_date', today),
+      supabase
+        .from('leaves')
+        .select('*, employees(full_name, position)')
+        .lte('start_date', today)
+        .gte('end_date', today)
+        .eq('status', 'approved')
+    ]);
+
+    if (!schedRes.error && !leavesRes.error) {
+      const leaves = leavesRes.data || [];
+      const schedules = schedRes.data || [];
+      const onLeaveEmpIds = leaves.map(l => l.employee_id);
+      const activeSchedules = schedules.filter(s => !onLeaveEmpIds.includes(s.employee_id));
+
+      setOnDuty(activeSchedules.filter(s => s.shift_type === 'duty'));
+      setDayOff(activeSchedules.filter(s => s.shift_type === 'day_off'));
+      setOnLeave(leaves.map(l => ({
+        id: `leave_${l.id}`,
+        employee_id: l.employee_id,
+        shift_type: 'on_leave',
+        employees: l.employees,
+      })));
+    }
+    setRefreshing(false);
   }
 
   const getOverlappingLeave = (dateStr) => {
@@ -156,18 +197,49 @@ export default function DutyBoardScreen() {
 
   return (
     <View style={styles.container}>
-      {loading ? <ActivityIndicator size="large" color="#3498DB" /> : (
+      <ScrollView
+        style={{ flex: 1 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3498DB"]} />
+        }
+      >
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>On Duty ({onDuty.length})</Text>
-          <FlatList data={onDuty} keyExtractor={item => item.id} renderItem={renderItem} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <Text style={[styles.headerTitle, { marginBottom: 0 }]}>On Duty ({onDuty.length})</Text>
+            <TouchableOpacity onPress={() => setSettingsModalVisible(true)} style={{ padding: 4 }}>
+              <Ionicons name="settings-outline" size={22} color="#3498DB" />
+            </TouchableOpacity>
+          </View>
+          {loading && !refreshing ? <ActivityIndicator size="large" color="#3498DB" style={{ marginVertical: 20 }} /> : (
+            <View>
+              {onDuty.map(item => (
+                <View key={item.id}>{renderItem({ item })}</View>
+              ))}
+              {onDuty.length === 0 && <Text style={{ color: '#7F8C8D', textAlign: 'center', marginVertical: 10 }}>No one on duty today</Text>}
+            </View>
+          )}
 
           <Text style={[styles.headerTitle, { marginTop: 16 }]}>Day Off ({dayOff.length})</Text>
-          <FlatList data={dayOff} keyExtractor={item => item.id} renderItem={renderItem} />
+          {loading && !refreshing ? <ActivityIndicator size="large" color="#3498DB" style={{ marginVertical: 20 }} /> : (
+            <View>
+              {dayOff.map(item => (
+                <View key={item.id}>{renderItem({ item })}</View>
+              ))}
+              {dayOff.length === 0 && <Text style={{ color: '#7F8C8D', textAlign: 'center', marginVertical: 10 }}>No one on day off today</Text>}
+            </View>
+          )}
 
           <Text style={[styles.headerTitle, { marginTop: 16 }]}>On Leave ({onLeave.length})</Text>
-          <FlatList data={onLeave} keyExtractor={item => item.id} renderItem={renderItem} />
+          {loading && !refreshing ? <ActivityIndicator size="large" color="#3498DB" style={{ marginVertical: 20 }} /> : (
+            <View>
+              {onLeave.map(item => (
+                <View key={item.id}>{renderItem({ item })}</View>
+              ))}
+              {onLeave.length === 0 && <Text style={{ color: '#7F8C8D', textAlign: 'center', marginVertical: 10 }}>No one on leave today</Text>}
+            </View>
+          )}
         </View>
-      )}
+      </ScrollView>
 
       {/* Employee Schedule Detail Modal */}
       <Modal
@@ -242,18 +314,32 @@ export default function DutyBoardScreen() {
                         }
 
                         const isToday = sched.work_date === todayStr;
+                        const isDayOff = sched.shift_type !== 'duty' && !overlappingLeave;
 
                         return (
-                          <View key={sched.id} style={[styles.scheduleItem, isToday && styles.todayScheduleItem]}>
+                          <View key={sched.id} style={[
+                            styles.scheduleItem,
+                            isToday && styles.todayScheduleItem,
+                            isDayOff && !isToday && styles.dayOffScheduleItem,
+                          ]}>
                             <View style={[styles.iconWrapper, { backgroundColor: iconBg }]}>
                               <Ionicons name={iconName} size={18} color={iconColor} />
                             </View>
                             <View style={{ flex: 1 }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={[styles.scheduleDate, isToday && styles.todayScheduleDate]}>{sched.work_date}</Text>
+                                <Text style={[
+                                  styles.scheduleDate,
+                                  isToday && styles.todayScheduleDate,
+                                  isDayOff && !isToday && styles.dayOffScheduleDate,
+                                ]}>{sched.work_date}</Text>
                                 {isToday && (
                                   <View style={styles.todayBadge}>
                                     <Text style={styles.todayBadgeText}>TODAY</Text>
+                                  </View>
+                                )}
+                                {isDayOff && !isToday && (
+                                  <View style={styles.dayOffBadge}>
+                                    <Text style={styles.dayOffBadgeText}>DAY OFF</Text>
                                   </View>
                                 )}
                               </View>
@@ -277,9 +363,41 @@ export default function DutyBoardScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* App Settings Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={settingsModalVisible}
+        onRequestClose={() => setSettingsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Device Settings</Text>
+                <Text style={styles.modalSubtitle}>Configure local application security</Text>
+              </View>
+              <TouchableOpacity onPress={() => setSettingsModalVisible(false)} style={styles.closeIconButton}>
+                <Ionicons name="close" size={24} color="#7F8C8D" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%', marginBottom: 16 }}>
+              <BiometricSettings />
+            </ScrollView>
+            <TouchableOpacity
+              onPress={() => setSettingsModalVisible(false)}
+              style={styles.modalCloseButton}
+            >
+              <Text style={styles.modalCloseButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA', padding: 16 },
@@ -411,6 +529,31 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   todayBadgeText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  dayOffScheduleItem: {
+    backgroundColor: '#FFF8F0',
+    borderColor: '#E67E22',
+    borderWidth: 1,
+    borderRadius: 10,
+    marginVertical: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  dayOffScheduleDate: {
+    color: '#CA6F1E',
+  },
+  dayOffBadge: {
+    backgroundColor: '#E67E22',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  dayOffBadgeText: {
     color: '#FFF',
     fontSize: 9,
     fontWeight: 'bold',

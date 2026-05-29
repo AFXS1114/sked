@@ -5,9 +5,22 @@ import { useRouter } from 'expo-router';
 import { TouchableOpacity, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ManagerLayout() {
   const router = useRouter();
+  const { signOut } = useAuth();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Logout', onPress: signOut, style: 'destructive' }
+      ]
+    );
+  };
 
   useEffect(() => {
     async function sendDailySummary() {
@@ -54,6 +67,11 @@ export default function ManagerLayout() {
         headerLeft: () => (
           <TouchableOpacity onPress={() => router.replace('/')} style={{ marginLeft: 16 }}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+        ),
+        headerRight: () => (
+          <TouchableOpacity onPress={handleLogout} style={{ marginRight: 16 }}>
+            <Ionicons name="log-out-outline" size={24} color="#FFF" />
           </TouchableOpacity>
         ),
       }}
